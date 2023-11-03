@@ -1,6 +1,5 @@
 <script lang="ts">
-  import type {SvelteComponent} from "svelte";
-  import {loginStore, parseJwt, type LoginStore} from "./stores/login";
+  import {loginStore} from "./stores/login";
   import {openLoginPopup} from "./utils/login-popup";
 </script>
 
@@ -10,7 +9,7 @@
   </div>
   <div class="flex-gap" />
   <div class="nav-link">
-    <a href="https://status.1f349.net" target="_blank">Status</a>
+    <a href="https://status.1f349.com" target="_blank">Status</a>
   </div>
   {#if $loginStore == null}
     <div class="login-view">
