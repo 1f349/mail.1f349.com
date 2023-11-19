@@ -1,6 +1,21 @@
 <script lang="ts">
-  import {loginStore} from "./stores/login";
+  import {getBearer, loginStore} from "./stores/login";
   import {openLoginPopup} from "./utils/login-popup";
+
+  let mainWS: WebSocket;
+  $: window.mainWS = mainWS;
+
+  function connectWS() {
+    mainWS = new WebSocket("https://api.1f349.com/v1/lotus/imap");
+    mainWS.addEventListener("open", () => {
+      mainWS.send(JSON.stringify({token: getBearer().slice(7)}));
+    });
+  }
+
+  function removeLoginSession() {
+    $loginStore = null;
+    localStorage.removeItem("login-session");
+  }
 </script>
 
 <header>
@@ -19,14 +34,7 @@
     <div class="user-view">
       <img class="user-avatar" src={$loginStore.userinfo.picture} alt="{$loginStore.userinfo.name}'s profile picture" />
       <div class="user-display-name">{$loginStore.userinfo.name}</div>
-      <button
-        on:click={() => {
-          $loginStore = null;
-          localStorage.removeItem("login-session");
-        }}
-      >
-        Logout
-      </button>
+      <button on:click={() => removeLoginSession()}>Logout</button>
     </div>
   {/if}
 </header>
