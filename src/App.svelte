@@ -48,6 +48,7 @@
     </div>
     <div id="option-view">
       <div style="padding:8px;background-color:#bb7900;">Warning: This is currently still under development</div>
+      <button on:click={() => connectWS()}>Connect WS</button>
     </div>
   {/if}
 </main>
