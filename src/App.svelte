@@ -6,7 +6,7 @@
   $: window.mainWS = mainWS;
 
   function connectWS() {
-    mainWS = new WebSocket("https://api.1f349.com/v1/lotus/imap");
+    mainWS = new WebSocket("wss://api.1f349.com/v1/lotus/imap");
     mainWS.addEventListener("open", () => {
       mainWS.send(JSON.stringify({token: getBearer().slice(7)}));
     });
