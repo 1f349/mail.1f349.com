@@ -3,12 +3,22 @@
   import {getBearer, loginStore} from "./stores/login";
   import {openLoginPopup} from "./utils/login-popup";
   import type {ImapFolder} from "./types/imap";
-  import type {TreeFolder, RootFolder} from "./types/internal";
+  import type {TreeFolder, RootFolder, FolderSelection} from "./types/internal";
+  import TreePath from "./components/TreePath.svelte";
 
   let mainWS: WebSocket;
   $: window.mainWS = mainWS;
 
   let folders: RootFolder[] = [];
+  let selectedFolder: FolderSelection = {name: "Inbox", path: "INBOX"};
+  let inboxOption: string = "*";
+  let inboxOptions: string[] = [];
+
+  function changeSelectedFolder(p: FolderSelection) {
+    selectedFolder = p;
+  }
+
+  $: console.log("Selected", selectedFolder);
 
   function countChar(s: string, c: string) {
     let result = 0;
@@ -53,12 +63,12 @@
         imapFolders = imapFolders.sort((a, b) => countChar(a.Name, a.Delimiter) - countChar(b.Name, b.Delimiter));
 
         // Setup root folders
-        let INBOX: RootFolder = {role: "Inbox", name: "Inbox", attr: new Set(), children: []};
-        let DRAFTS: RootFolder = {role: "Drafts", name: "Drafts", attr: new Set(["\\\\Drafts"]), children: []};
-        let SENT: RootFolder = {role: "Sent", name: "Sent", attr: new Set(["\\\\Sent"]), children: []};
-        let ARCHIVE: RootFolder = {role: "Archive", name: "Archive", attr: new Set(["\\\\Archive"]), children: []};
-        let JUNK: RootFolder = {role: "Junk", name: "Junk", attr: new Set(["\\\\Junk"]), children: []};
-        let TRASH: RootFolder = {role: "Trash", name: "Trash", attr: new Set(["\\\\Trash"]), children: []};
+        let INBOX: RootFolder = {role: "Inbox", name: "Inbox", path: "", attr: new Set(), children: []};
+        let DRAFTS: RootFolder = {role: "Drafts", name: "Drafts", path: "", attr: new Set(["\\Drafts"]), children: []};
+        let SENT: RootFolder = {role: "Sent", name: "Sent", path: "", attr: new Set(["\\Sent"]), children: []};
+        let ARCHIVE: RootFolder = {role: "Archive", name: "Archive", path: "", attr: new Set(["\\Archive"]), children: []};
+        let JUNK: RootFolder = {role: "Junk", name: "Junk", path: "", attr: new Set(["\\Junk"]), children: []};
+        let TRASH: RootFolder = {role: "Trash", name: "Trash", path: "", attr: new Set(["\\Trash"]), children: []};
 
         // Setup map to find special folders
         let ROOT: Map<string, RootFolder> = new Map();
@@ -132,6 +142,7 @@
           // add child to current parent
           pObj.children.push({
             name: x.Name.slice(pIdx),
+            path: x.Name,
             attr: new Set(x.Attributes),
             children: [],
           });
@@ -179,21 +190,35 @@
   {:else}
     <div id="sidebar">
       {#each folders as folder}
-        <button class:selected={folder.name === "INBOX"}>{folder.name}</button>
-        <div>{folder.children.length}</div>
+        <TreePath data={folder} selected={selectedFolder.name} on:select={n => changeSelectedFolder(n.detail)} />
       {/each}
     </div>
     <div id="option-view">
       <div style="padding:8px;background-color:#bb7900;">Warning: This is currently still under development</div>
       <button on:click={() => connectWS()}>Connect WS</button>
-      <div>
-        <code>
-          <pre>{JSON.stringify(folders, null, 2)}</pre>
-        </code>
-      </div>
     </div>
   {/if}
 </main>
+<footer>
+  <div class="meta-version">
+    Version: <code>{import.meta.env.VITE_APP_VERSION}</code>
+    , {import.meta.env.VITE_APP_LASTMOD}
+  </div>
+  <div>
+    <a href="https://github.com/1f349/mail.1f349.com" target="_blank">Source</a>
+  </div>
+  <div>
+    <label>
+      <span>Inbox:</span>
+      <select bind:value={inboxOption}>
+        <option value="*">Default</option>
+        {#each inboxOptions as inbox}
+          <option value={inbox}>{inbox}</option>
+        {/each}
+      </select>
+    </label>
+  </div>
+</footer>
 
 <style lang="scss">
   header {
@@ -254,11 +279,12 @@
     display: flex;
     flex-grow: 1;
     align-items: stretch;
-    height: calc(100% - 70px);
+    height: 0;
 
     #sidebar {
-      width: 150px;
-      min-width: 150px;
+      width: auto;
+      min-width: 250px;
+      overflow-y: auto;
 
       button {
         background-color: #2c2c2c;
@@ -293,5 +319,14 @@
       height: 100%;
       flex-grow: 1;
     }
+  }
+
+  footer {
+    padding: 8px;
+    background-color: #2c2c2c;
+    box-shadow: 0 -4px 8px #0003, 0 -6px 20px #00000030;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
   }
 </style>
