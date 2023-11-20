@@ -1,20 +1,23 @@
 <script lang="ts">
+  import {onMount} from "svelte";
   import {getBearer, loginStore} from "./stores/login";
   import {openLoginPopup} from "./utils/login-popup";
+  import type {ImapFolder} from "./types/imap";
+  import type {TreeFolder, RootFolder} from "./types/internal";
 
   let mainWS: WebSocket;
   $: window.mainWS = mainWS;
 
-  interface FolderValue {
-    Attributes: string[];
-    Delimiter: string;
-    Name: string;
+  let folders: RootFolder[] = [];
+
+  function countChar(s: string, c: string) {
+    let result = 0;
+    for (let i = 0; i < s.length; i++) if (s[i] == c) result++;
+    return result;
   }
 
-  let folders: FolderValue[] = [];
-
   function connectWS() {
-    mainWS = new WebSocket("wss://api.1f349.com/v1/lotus/imap");
+    mainWS = new WebSocket(import.meta.env.VITE_IMAP_LOTUS);
     mainWS.addEventListener("open", () => {
       mainWS.send(JSON.stringify({token: getBearer().slice(7)}));
     });
@@ -24,24 +27,119 @@
         mainWS.send(JSON.stringify({action: "list", args: ["", "*"]}));
       }
       if (j.type === "list") {
-        folders = j.value;
-        folders.sort((a, b) => a.Name.localeCompare(b.Name));
+        // === Example output of list command ===
+        // let j = {
+        //   type: "list",
+        //   value: [
+        //     {Attributes: ["\\HasChildren", "\\UnMarked", "\\Archive"], Delimiter: "/", Name: "Archive"},
+        //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Junk"], Delimiter: "/", Name: "Junk"},
+        //     {Attributes: ["\\HasChildren", "\\Trash"], Delimiter: "/", Name: "Trash"},
+        //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/status"},
+        //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hello"},
+        //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hi"},
+        //     {Attributes: ["\\Noselect", "\\HasChildren"], Delimiter: "/", Name: "INBOX/sub"},
+        //     {Attributes: ["\\HasNoChildren"], Delimiter: "/", Name: "INBOX/sub/folder"},
+        //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Drafts"], Delimiter: "/", Name: "Drafts"},
+        //     {Attributes: ["\\HasNoChildren", "\\Sent"], Delimiter: "/", Name: "Sent"},
+        //     {Attributes: ["\\HasChildren"], Delimiter: "/", Name: "INBOX"},
+        //   ],
+        // };
+
+        let imapFolders = j.value as ImapFolder[];
+
+        // Remove no-select folders
+        imapFolders = imapFolders.filter(x => !x.Attributes.includes("\\\\Noselect"));
+        // Sort shorter paths first so parent folders are registered before children
+        imapFolders = imapFolders.sort((a, b) => countChar(a.Name, a.Delimiter) - countChar(b.Name, b.Delimiter));
+
+        // Setup root folders
+        let INBOX: RootFolder = {role: "Inbox", name: "Inbox", attr: new Set(), children: []};
+        let DRAFTS: RootFolder = {role: "Drafts", name: "Drafts", attr: new Set(["\\\\Drafts"]), children: []};
+        let SENT: RootFolder = {role: "Sent", name: "Sent", attr: new Set(["\\\\Sent"]), children: []};
+        let ARCHIVE: RootFolder = {role: "Archive", name: "Archive", attr: new Set(["\\\\Archive"]), children: []};
+        let JUNK: RootFolder = {role: "Junk", name: "Junk", attr: new Set(["\\\\Junk"]), children: []};
+        let TRASH: RootFolder = {role: "Trash", name: "Trash", attr: new Set(["\\\\Trash"]), children: []};
+
+        // Setup map to find special folders
+        let ROOT: Map<string, RootFolder> = new Map();
+        ROOT.set("Drafts", DRAFTS);
+        ROOT.set("Sent", SENT);
+        ROOT.set("Archive", ARCHIVE);
+        ROOT.set("Junk", JUNK);
+        ROOT.set("Trash", TRASH);
+
+        // Store reference to special folders
+        let ROOTKEYS: Map<string, RootFolder> = new Map();
+
+        imapFolders.forEach(x => {
+          // Find inbox folder
+          if (x.Name === "INBOX") {
+            x.Attributes.forEach(x => {
+              INBOX.attr.add(x);
+            });
+            ROOTKEYS.set(x.Name, INBOX);
+            return; // continue imapFolders loop
+          }
+
+          // Test for all special folder attributes
+          for (let [k, v] of ROOT.entries()) {
+            if (x.Attributes.includes("\\" + k)) {
+              v.name = x.Name;
+              x.Attributes.forEach(x => {
+                v.attr.add(x);
+              });
+              // map name to root key
+              ROOTKEYS.set(x.Name, v);
+              return; // continue imapFolders loop
+            }
+          }
+
+          let n = x.Name.indexOf(x.Delimiter);
+          if (n == -1) {
+            console.error("No parent folder wtf??", x.Name);
+            return;
+          }
+          let parent = x.Name.slice(0, n);
+          let pObj: TreeFolder | undefined = ROOTKEYS.get(parent);
+          if (pObj == undefined) {
+            console.error("Parent is not a root folder??", x.Name);
+            return;
+          }
+
+          let pIdx = n + 1;
+
+          for (let i = pIdx; i < x.Name.length; i++) {
+            if (x.Name[i] != x.Delimiter) continue;
+            // find child matching current slice
+            let nextObj: TreeFolder | undefined = pObj?.children.find(x2 => {
+              // check if folder matches current slice
+              return x2.name === x.Name.slice(pIdx, i);
+            });
+            // if no slice is found try a bigger slice
+            if (nextObj == undefined) continue;
+
+            // move into child folder
+            pObj = nextObj;
+            pIdx = i + 1;
+          }
+
+          // no parent was found at all
+          if (pObj == undefined) {
+            console.error("Parent folder does not exist??", x.Name);
+            return;
+          }
+
+          // add child to current parent
+          pObj.children.push({
+            name: x.Name.slice(pIdx),
+            attr: new Set(x.Attributes),
+            children: [],
+          });
+        });
+
+        // output special folders in order
+        folders = [INBOX, DRAFTS, SENT, ARCHIVE, JUNK, TRASH];
       }
-      // let a = {
-      //   type: "list",
-      //   value: [
-      //     {Attributes: ["\\HasChildren", "\\UnMarked", "\\Archive"], Delimiter: "/", Name: "Archive"},
-      //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Junk"], Delimiter: "/", Name: "Junk"},
-      //     {Attributes: ["\\HasChildren", "\\Trash"], Delimiter: "/", Name: "Trash"},
-      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/status"},
-      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hello"},
-      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hi"},
-      //     {Attributes: ["\\Noselect", "\\HasChildren"], Delimiter: "/", Name: "INBOX/this"},
-      //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Drafts"], Delimiter: "/", Name: "Drafts"},
-      //     {Attributes: ["\\HasNoChildren", "\\Sent"], Delimiter: "/", Name: "Sent"},
-      //     {Attributes: ["\\HasChildren"], Delimiter: "/", Name: "INBOX"},
-      //   ],
-      // };
     });
   }
 
@@ -49,6 +147,10 @@
     $loginStore = null;
     localStorage.removeItem("login-session");
   }
+
+  onMount(() => {
+    connectWS();
+  });
 </script>
 
 <header>
@@ -77,12 +179,18 @@
   {:else}
     <div id="sidebar">
       {#each folders as folder}
-        <button class:selected={folder.Name === "INBOX"}>{folder.Name}</button>
+        <button class:selected={folder.name === "INBOX"}>{folder.name}</button>
+        <div>{folder.children.length}</div>
       {/each}
     </div>
     <div id="option-view">
       <div style="padding:8px;background-color:#bb7900;">Warning: This is currently still under development</div>
       <button on:click={() => connectWS()}>Connect WS</button>
+      <div>
+        <code>
+          <pre>{JSON.stringify(folders, null, 2)}</pre>
+        </code>
+      </div>
     </div>
   {/if}
 </main>
