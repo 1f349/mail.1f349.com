@@ -25,6 +25,7 @@
       }
       if (j.type === "list") {
         folders = j.value;
+        folders.sort((a, b) => a.Name.localeCompare(b.Name));
       }
       // let a = {
       //   type: "list",
