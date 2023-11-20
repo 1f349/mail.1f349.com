@@ -11,7 +11,7 @@
     Name: string;
   }
 
-  let folders: FolderValue[];
+  let folders: FolderValue[] = [];
 
   function connectWS() {
     mainWS = new WebSocket("wss://api.1f349.com/v1/lotus/imap");
