@@ -5,10 +5,42 @@
   let mainWS: WebSocket;
   $: window.mainWS = mainWS;
 
+  interface FolderValue {
+    Attributes: string[];
+    Delimiter: string;
+    Name: string;
+  }
+
+  let folders: FolderValue[];
+
   function connectWS() {
     mainWS = new WebSocket("wss://api.1f349.com/v1/lotus/imap");
     mainWS.addEventListener("open", () => {
       mainWS.send(JSON.stringify({token: getBearer().slice(7)}));
+    });
+    mainWS.addEventListener("message", e => {
+      let j = JSON.parse(e.data);
+      if (j.auth === "ok") {
+        mainWS.send(JSON.stringify({action: "list", args: ["", "*"]}));
+      }
+      if (j.type === "list") {
+        folders = j.value;
+      }
+      // let a = {
+      //   type: "list",
+      //   value: [
+      //     {Attributes: ["\\HasChildren", "\\UnMarked", "\\Archive"], Delimiter: "/", Name: "Archive"},
+      //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Junk"], Delimiter: "/", Name: "Junk"},
+      //     {Attributes: ["\\HasChildren", "\\Trash"], Delimiter: "/", Name: "Trash"},
+      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/status"},
+      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hello"},
+      //     {Attributes: ["\\HasNoChildren", "\\UnMarked"], Delimiter: "/", Name: "INBOX/hi"},
+      //     {Attributes: ["\\Noselect", "\\HasChildren"], Delimiter: "/", Name: "INBOX/this"},
+      //     {Attributes: ["\\HasNoChildren", "\\UnMarked", "\\Drafts"], Delimiter: "/", Name: "Drafts"},
+      //     {Attributes: ["\\HasNoChildren", "\\Sent"], Delimiter: "/", Name: "Sent"},
+      //     {Attributes: ["\\HasChildren"], Delimiter: "/", Name: "INBOX"},
+      //   ],
+      // };
     });
   }
 
@@ -43,8 +75,9 @@
     <div id="login-view">Please login to continue</div>
   {:else}
     <div id="sidebar">
-      <button class="selected">Inbox</button>
-      <button>Sent</button>
+      {#each folders as folder}
+        <button class:selected={folder.Name === "INBOX"}>{folder.Name}</button>
+      {/each}
     </div>
     <div id="option-view">
       <div style="padding:8px;background-color:#bb7900;">Warning: This is currently still under development</div>
