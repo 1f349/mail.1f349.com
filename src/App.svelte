@@ -58,7 +58,7 @@
         let imapFolders = j.value as ImapFolder[];
 
         // Remove no-select folders
-        imapFolders = imapFolders.filter(x => !x.Attributes.includes("\\\\Noselect"));
+        imapFolders = imapFolders.filter(x => !x.Attributes.includes("\\Noselect"));
         // Sort shorter paths first so parent folders are registered before children
         imapFolders = imapFolders.sort((a, b) => countChar(a.Name, a.Delimiter) - countChar(b.Name, b.Delimiter));
 
