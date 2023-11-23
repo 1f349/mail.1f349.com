@@ -50,7 +50,7 @@
   function grabFolderMessages(p: TreeFolder) {
     let msgs = messageList.get(p.path);
     if (msgs == undefined) {
-      mainWS.send(JSON.stringify({action: "fetch", args: [p.path, 1, 10, 10]}));
+      mainWS.send(JSON.stringify({action: "fetch", args: [p.path, "1", "10", "10"]}));
       return;
     }
     folderMessages = msgs;
