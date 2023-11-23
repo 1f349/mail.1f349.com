@@ -1,6 +1,6 @@
 export interface TreeFolder {
-  name: string;
-  path: string;
+  name: string; // Local name
+  path: string; // Global path
   attr: Set<string>;
   children: TreeFolder[];
 }
@@ -11,5 +11,5 @@ export interface RootFolder extends TreeFolder {
 
 export interface FolderSelection {
   name: string;
-  path: string;
+  obj: TreeFolder;
 }

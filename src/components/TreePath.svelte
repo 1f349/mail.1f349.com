@@ -35,7 +35,7 @@
   }
 
   function triggerSelected(n?: FolderSelection) {
-    dispatch("select", n == undefined ? {name: data.name, path: data.path} : n);
+    dispatch("select", n == undefined ? {name: data.name, obj: data} : n);
   }
 </script>
 
@@ -53,7 +53,7 @@
         data={child}
         treeOffset={treeOffset + 1}
         selected={getNextSelected(selected)}
-        on:select={n => triggerSelected({name: data.name + "/" + n.detail.name, path: n.detail.path})}
+        on:select={n => triggerSelected({name: data.name + "/" + n.detail.name, obj: n.detail.obj})}
       />
     {/each}
   </div>

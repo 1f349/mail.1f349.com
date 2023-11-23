@@ -2,23 +2,61 @@
   import {onMount} from "svelte";
   import {getBearer, loginStore} from "./stores/login";
   import {openLoginPopup} from "./utils/login-popup";
-  import type {ImapFolder} from "./types/imap";
+  import type {ImapFolder, ImapMessage} from "./types/imap";
   import type {TreeFolder, RootFolder, FolderSelection} from "./types/internal";
   import TreePath from "./components/TreePath.svelte";
+  import MailView from "./components/MailView.svelte";
+  import FolderView from "./components/FolderView.svelte";
+  import type {Folders} from "lucide-svelte";
 
   let mainWS: WebSocket;
   $: window.mainWS = mainWS;
 
+  // Setup root folders
+  let INBOX: RootFolder = {role: "Inbox", name: "Inbox", path: "INBOX", attr: new Set(), children: []};
+  let DRAFTS: RootFolder = {role: "Drafts", name: "Drafts", path: "", attr: new Set(["\\Drafts"]), children: []};
+  let SENT: RootFolder = {role: "Sent", name: "Sent", path: "", attr: new Set(["\\Sent"]), children: []};
+  let ARCHIVE: RootFolder = {role: "Archive", name: "Archive", path: "", attr: new Set(["\\Archive"]), children: []};
+  let JUNK: RootFolder = {role: "Junk", name: "Junk", path: "", attr: new Set(["\\Junk"]), children: []};
+  let TRASH: RootFolder = {role: "Trash", name: "Trash", path: "", attr: new Set(["\\Trash"]), children: []};
+
+  // Setup map to find special folders
+  let ROOT: Map<string, RootFolder> = new Map();
+  ROOT.set("Drafts", DRAFTS);
+  ROOT.set("Sent", SENT);
+  ROOT.set("Archive", ARCHIVE);
+  ROOT.set("Junk", JUNK);
+  ROOT.set("Trash", TRASH);
+
   let folders: RootFolder[] = [];
-  let selectedFolder: FolderSelection = {name: "Inbox", path: "INBOX"};
   let inboxOption: string = "*";
   let inboxOptions: string[] = [];
 
+  let messageList: Map<string, ImapMessage[]> = new Map();
+  let messageLookup: Map<string, ImapMessage> = new Map();
+  window.messageLookup = messageLookup;
+
+  let currentFolder: FolderSelection = {name: "Inbox", obj: INBOX};
+  let folderMessages: ImapMessage[] = [];
+  $: folderMessages = messageList.get(currentFolder.obj.path);
+
+  let currentMessage: ImapMessage | null = null;
+
   function changeSelectedFolder(p: FolderSelection) {
-    selectedFolder = p;
+    currentFolder = p;
+    grabFolderMessages(p.obj);
   }
 
-  $: console.log("Selected", selectedFolder);
+  function grabFolderMessages(p: TreeFolder) {
+    let msgs = messageList.get(p.path);
+    if (msgs == undefined) {
+      mainWS.send(JSON.stringify({action: "fetch", args: [p.path, 1, 10, 10]}));
+      return;
+    }
+    folderMessages = msgs;
+  }
+
+  $: console.log("Selected", currentFolder);
 
   function countChar(s: string, c: string) {
     let result = 0;
@@ -62,22 +100,6 @@
         // Sort shorter paths first so parent folders are registered before children
         imapFolders = imapFolders.sort((a, b) => countChar(a.Name, a.Delimiter) - countChar(b.Name, b.Delimiter));
 
-        // Setup root folders
-        let INBOX: RootFolder = {role: "Inbox", name: "Inbox", path: "", attr: new Set(), children: []};
-        let DRAFTS: RootFolder = {role: "Drafts", name: "Drafts", path: "", attr: new Set(["\\Drafts"]), children: []};
-        let SENT: RootFolder = {role: "Sent", name: "Sent", path: "", attr: new Set(["\\Sent"]), children: []};
-        let ARCHIVE: RootFolder = {role: "Archive", name: "Archive", path: "", attr: new Set(["\\Archive"]), children: []};
-        let JUNK: RootFolder = {role: "Junk", name: "Junk", path: "", attr: new Set(["\\Junk"]), children: []};
-        let TRASH: RootFolder = {role: "Trash", name: "Trash", path: "", attr: new Set(["\\Trash"]), children: []};
-
-        // Setup map to find special folders
-        let ROOT: Map<string, RootFolder> = new Map();
-        ROOT.set("Drafts", DRAFTS);
-        ROOT.set("Sent", SENT);
-        ROOT.set("Archive", ARCHIVE);
-        ROOT.set("Junk", JUNK);
-        ROOT.set("Trash", TRASH);
-
         // Store reference to special folders
         let ROOTKEYS: Map<string, RootFolder> = new Map();
 
@@ -98,6 +120,7 @@
               x.Attributes.forEach(x => {
                 v.attr.add(x);
               });
+              v.path = x.Name;
               // map name to root key
               ROOTKEYS.set(x.Name, v);
               return; // continue imapFolders loop
@@ -151,6 +174,35 @@
         // output special folders in order
         folders = [INBOX, DRAFTS, SENT, ARCHIVE, JUNK, TRASH];
       }
+      if (j.type == "fetch") {
+        // {
+        //   type: "fetch",
+        //   value: [
+        //     {
+        //       $Body: {},
+        //       BodyStructure: null,
+        //       Envelope: {
+        //         Date: "2023-09-10T20:54:09-04:00",
+        //         Subject: "This is an email subject",
+        //         From: [{PersonalName: "A Cool User", AtDomainList: "", MailboxName: "test", HostName: "example.com"}],
+        //         Sender: [{PersonalName: "A Cool User", AtDomainList: "", MailboxName: "test", HostName: "example.com"}],
+        //         ReplyTo: [{PersonalName: "A Cool User", AtDomainList: "", MailboxName: "test", HostName: "example.com"}],
+        //         To: [{PersonalName: "Internal", AtDomainList: "", MailboxName: "melon+hi", HostName: "example.org"}],
+        //         Cc: null,
+        //         Bcc: null,
+        //         InReplyTo: "",
+        //         MessageId: "\u003c950124.162336@example.com\u003e",
+        //       },
+        //       Flags: ["\\Seen", "nonjunk"],
+        //       InternalDate: "2023-09-10T20:54:10-04:00",
+        //       Items: ["UID", "FLAGS", "INTERNALDATE", "ENVELOPE"],
+        //       SeqNum: 1,
+        //       Size: 0,
+        //       Uid: 18,
+        //     }
+        //   ]
+        // };
+      }
     });
   }
 
@@ -190,12 +242,19 @@
   {:else}
     <div id="sidebar">
       {#each folders as folder}
-        <TreePath data={folder} selected={selectedFolder.name} on:select={n => changeSelectedFolder(n.detail)} />
+        <TreePath data={folder} selected={currentFolder.name} on:select={n => changeSelectedFolder(n.detail)} />
       {/each}
     </div>
-    <div id="option-view">
+    <div id="folder-view">
+      <FolderView folder={currentFolder} messages={folderMessages} />
+    </div>
+    <div id="message-view">
       <div style="padding:8px;background-color:#bb7900;">Warning: This is currently still under development</div>
-      <button on:click={() => connectWS()}>Connect WS</button>
+      {#if currentMessage != null}
+        <MailView message={currentMessage} />
+      {:else}
+        <div style="padding:8px;">No message selected</div>
+      {/if}
     </div>
   {/if}
 </main>
@@ -285,28 +344,6 @@
       width: auto;
       min-width: 250px;
       overflow-y: auto;
-
-      button {
-        background-color: #2c2c2c;
-        border: none;
-        box-shadow: none;
-        box-sizing: border-box;
-        color: tomato;
-        cursor: pointer;
-        font-size: 20px;
-        font-weight: 700;
-        line-height: 24px;
-        width: 100%;
-        height: 70px;
-
-        &:hover {
-          background-color: #1c1c1c;
-        }
-
-        &.selected {
-          background-color: #1c1c1c;
-        }
-      }
     }
 
     #login-view {
