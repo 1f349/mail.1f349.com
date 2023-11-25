@@ -1,8 +1,8 @@
 <script lang="ts">
   import {slide} from "svelte/transition";
-  import type {FolderSelection, RootFolder, TreeFolder} from "../types/internal";
   import {Archive, ChevronRight, Flame, Folder, Inbox, Send, Text, Trash2} from "lucide-svelte";
   import {createEventDispatcher} from "svelte";
+  import type { MailFolder, RootMailFolder } from "../logic/folder";
 
   let folderIcons: {[key: string]: any} = {
     Inbox: Inbox,
@@ -15,12 +15,12 @@
 
   const dispatch = createEventDispatcher();
 
-  export let data: TreeFolder;
+  export let data: MailFolder;
   let expanded: boolean = false;
   export let treeOffset: number = 0;
   export let selected: string = "";
 
-  function isRootFolder(obj: any): obj is RootFolder {
+  function isRootFolder(obj: any): obj is RootMailFolder {
     return "role" in obj;
   }
 
@@ -34,8 +34,8 @@
     return full.slice(data.name.length + 1);
   }
 
-  function triggerSelected(n?: FolderSelection) {
-    dispatch("select", n == undefined ? {name: data.name, obj: data} : n);
+  function triggerSelected(n?: MailFolder) {
+    dispatch("select", n == undefined ? data : n);
   }
 </script>
 
@@ -53,7 +53,7 @@
         data={child}
         treeOffset={treeOffset + 1}
         selected={getNextSelected(selected)}
-        on:select={n => triggerSelected({name: data.name + "/" + n.detail.name, obj: n.detail.obj})}
+        on:select={n => triggerSelected(n.detail)}
       />
     {/each}
   </div>

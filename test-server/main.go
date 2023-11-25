@@ -160,6 +160,7 @@ func apiServer(verify mjwt.Verifier) {
 				c.WriteMessage(websocket.TextMessage, []byte(`{"auth":"ok"}`))
 				continue
 			} else if vAct, ok := m["action"]; ok {
+				args := m["args"]
 				switch vAct.(string) {
 				case "list":
 					log.Println(m)
@@ -188,6 +189,37 @@ func apiServer(verify mjwt.Verifier) {
 `))
 					}
 					continue
+				case "fetch":
+					c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`
+{
+	"type": "fetch",
+	"sync": %f,
+	"value": [
+		{
+			"$Body": {},
+			"BodyStructure": null,
+			"Envelope": {
+				"Date": "2023-09-10T20:54:09-04:00",
+				"Subject": "This is an email subject",
+				"From": [{"PersonalName": "A Cool User", "AtDomainList": "", "MailboxName": "test", "HostName": "example.com"}],
+				"Sender": [{"PersonalName": "A Cool User", "AtDomainList": "", "MailboxName": "test", "HostName": "example.com"}],
+				"ReplyTo": [{"PersonalName": "A Cool User", "AtDomainList": "", "MailboxName": "test", "HostName": "example.com"}],
+				"To": [{"PersonalName": "Internal", "AtDomainList": "", "MailboxName": "melon+hi", "HostName": "example.org"}],
+				"Cc": null,
+				"Bcc": null,
+				"InReplyTo": "",
+				"MessageId": "\u003c950124.162336@example.com\u003e"
+			},
+			"Flags": ["\\Seen", "nonjunk"],
+			"InternalDate": "2023-09-10T20:54:10-04:00",
+			"Items": ["UID", "FLAGS", "INTERNALDATE", "ENVELOPE"],
+			"SeqNum": 1,
+			"Size": 0,
+			"Uid": 18
+		}
+	]
+}
+`, args.(map[string]any)["sync"])))
 				}
 			}
 		}
