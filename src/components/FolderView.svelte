@@ -1,17 +1,24 @@
 <script lang="ts">
+  import type {MailFolder} from "../logic/folder";
   import type {ImapMessage} from "../types/imap";
-  import type {FolderSelection} from "../types/internal";
 
-  export let folder: FolderSelection;
+  export let folder: MailFolder;
   export let messages: ImapMessage[];
 </script>
 
-<code>
-  <pre>{JSON.stringify(folder, null, 2)}</pre>
-</code>
-<code>
-  <pre>{JSON.stringify(messages, null, 2)}</pre>
-</code>
+<h2>{folder.name}</h2>
+{#if messages}
+  {#each messages as msg}
+    <div class="msg">
+      <h3>{msg.Envelope.Subject}</h3>
+      <h3>{msg.Envelope.From}</h3>
+      <h3>{msg.Envelope.Date}</h3>
+    </div>
+  {/each}
+{/if}
 
 <style lang="scss">
+  .msg {
+    border-bottom: 1px solid white;
+  }
 </style>
